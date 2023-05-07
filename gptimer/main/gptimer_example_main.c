@@ -34,7 +34,7 @@ gptimer_handle_t synth_timer;
 
 static uint8_t wave_table[WAVE_TABLE_N_F0S][WAVE_TABLE_N_SAMPLES];
 static uint8_t wave_table_cursor = 0;
-double synth_frequency = 220;
+double synth_frequency;
 
 static bool IRAM_ATTR nextAudioSample(
     gptimer_handle_t timer, 
