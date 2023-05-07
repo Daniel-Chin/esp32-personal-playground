@@ -52,7 +52,7 @@ static bool IRAM_ATTR nextAudioSample(
     // );
     double value = wave_table[0][wave_table_cursor];
     dac_oneshot_output_voltage(
-        (dac_oneshot_handle_t)user_data, value
+        (dac_oneshot_handle_t)user_data, (uint8_t)round(value)
     );
     wave_table_cursor ++;
     if (wave_table_cursor == WAVE_TABLE_N_SAMPLES) {
@@ -133,7 +133,7 @@ void initWaveTable() {
 
 void updateFrequency(double new_freq) {
     gptimer_alarm_config_t alarm_config1 = {
-        .alarm_count = (int)round(CLOCK_FREQ / new_freq),
+        .alarm_count = (int)round(CLOCK_FREQ / (new_freq * WAVE_TABLE_N_SAMPLES)),
         .flags.auto_reload_on_alarm = true, 
         .reload_count = 0, 
     };
