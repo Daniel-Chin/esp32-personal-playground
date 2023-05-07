@@ -114,6 +114,9 @@ void initWaveTable() {
                     sample_i * (f_i + 1)
                 );
             }
+            if (acc < -1 || acc > 1) {
+                ESP_LOGE(PROJECT_TAG, "audio over-norm!");
+            }
             wave_table[f0_i][sample_i] = (uint8_t)round(
                 (acc + 1) * .5 * 255
             );
