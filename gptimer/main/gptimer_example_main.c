@@ -33,30 +33,21 @@ static const char *PROJECT_TAG = "Music X Flute";
 gptimer_handle_t synth_timer;
 
 static uint8_t wave_table[WAVE_TABLE_N_F0S][WAVE_TABLE_N_SAMPLES];
-static uint8_t wave_table_cursor = 0;
-double synth_frequency;
+static uint8_t wave_row[WAVE_TABLE_N_SAMPLES];
+static uint8_t wave_row_cursor = 0;
 
 static bool IRAM_ATTR nextAudioSample(
     gptimer_handle_t timer, 
     const gptimer_alarm_event_data_t *edata, 
     void *user_data
 ) {
-    double index = (synth_frequency - WAVE_TABLE_F0_MIN) * WAVE_TABLE_INV_D_FREQ;
-    index = (index < 0 ? 0 : index);
-    index = (index > WAVE_TABLE_MAX_F0_INDEX ? WAVE_TABLE_MAX_F0_INDEX : index);
-    int left = (int)floor(index);
-    double w = index - left;
-    double value = (
-        (1 - w) * wave_table[left    ][wave_table_cursor]
-        +     w * wave_table[left + 1][wave_table_cursor]
-    );
-    // double value = wave_table[0][wave_table_cursor];
     dac_oneshot_output_voltage(
-        (dac_oneshot_handle_t)user_data, (uint8_t)round(value)
+        (dac_oneshot_handle_t)user_data, 
+        wave_row[wave_row_cursor]
     );
-    wave_table_cursor ++;
-    if (wave_table_cursor == WAVE_TABLE_N_SAMPLES) {
-        wave_table_cursor = 0;
+    wave_row_cursor ++;
+    if (wave_row_cursor == WAVE_TABLE_N_SAMPLES) {
+        wave_row_cursor = 0;
     }
     // use uint8_t overflow instead. 
     // static_assert(WAVE_TABLE_N_SAMPLES == 256);
@@ -72,11 +63,11 @@ dac_oneshot_handle_t initDAC() {
     return handle;
 }
 
-#define N_PARTIALS 1
+#define N_PARTIALS 30
 #define TIMBRE_PITCH_BOTTOM 60
 #define TIMBRE_LEN 5
 const double TIMBRE[TIMBRE_LEN] = {
-    1, 1, 1, 1, 1, 
+    .3, .3, .3, .3, .03, 
 };
 double timbreAt(double freq) {
     double pitch = freq2pitch(freq);
@@ -131,14 +122,26 @@ void initWaveTable() {
     ESP_LOGI(PROJECT_TAG, "ok");
 }
 
-void updateFrequency(double new_freq) {
+void updateFrequency(double freq) {
     gptimer_alarm_config_t alarm_config1 = {
-        .alarm_count = (int)round(CLOCK_FREQ / (new_freq * WAVE_TABLE_N_SAMPLES)),
+        .alarm_count = (int)round(CLOCK_FREQ / (freq * WAVE_TABLE_N_SAMPLES)),
         .flags.auto_reload_on_alarm = true, 
         .reload_count = 0, 
     };
     gptimer_set_alarm_action(synth_timer, &alarm_config1);
-    synth_frequency = new_freq;
+    double index = (freq - WAVE_TABLE_F0_MIN) * WAVE_TABLE_INV_D_FREQ;
+    index = (index < 0 ? 0 : index);
+    index = (index > WAVE_TABLE_MAX_F0_INDEX ? WAVE_TABLE_MAX_F0_INDEX : index);
+    int left = (int)floor(index);
+    double w = index - left;
+    // weak todo: optim w/ SIMD (esp-dsp)
+    for (int i = 0; i < WAVE_TABLE_N_SAMPLES; i ++) {
+        wave_row[i] = (
+            (1 - w) * wave_table[left    ][i]
+            +     w * wave_table[left + 1][i]
+        );
+        // there is also race condition w/ ISR, but it's fine
+    }
 }
 
 void initSynthTimer(dac_oneshot_handle_t dac_handle) {
@@ -178,6 +181,6 @@ void app_main(void)
     for (int p = 72; p >= 48; p --) {
         ESP_LOGI(PROJECT_TAG, "pitch=%d", p);
         updateFrequency(pitch2freq(p));
-        vTaskDelay(100);
+        vTaskDelay(200);
     }
 }
