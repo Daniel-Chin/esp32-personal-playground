@@ -1,0 +1,9 @@
+{
+    "idf.adapterTargetName": "esp32",
+    "files.associations": {
+        "string.h": "c"
+    },
+    "idf.openOcdConfigs": [
+        "board/esp32-wrover-kit-3.3v.cfg"
+    ]
+}
