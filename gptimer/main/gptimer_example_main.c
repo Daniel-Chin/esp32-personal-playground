@@ -17,7 +17,7 @@
 #include "kit.c"
 #include "music.c"
 
-#define WAVE_TABLE_N_SAMPLES 255
+#define WAVE_TABLE_N_SAMPLES 128
 #define WAVE_TABLE_N_F0S 256
 static const double WAVE_TABLE_MAX_F0_INDEX = WAVE_TABLE_N_F0S - 1.0001;
 #define WAVE_TABLE_F0_MIN 250     // ~ C4
@@ -26,7 +26,7 @@ static const double WAVE_TABLE_INV_D_FREQ = 1 / ((
     WAVE_TABLE_F0_MAX - WAVE_TABLE_F0_MIN
 ) / (double)(WAVE_TABLE_N_F0S - 1));
 
-#define CLOCK_FREQ 1e6
+#define CLOCK_FREQ 8e6
 
 static const char *PROJECT_TAG = "Music X Flute";
 
@@ -46,11 +46,11 @@ static bool IRAM_ATTR nextAudioSample(
     index = (index > WAVE_TABLE_MAX_F0_INDEX ? WAVE_TABLE_MAX_F0_INDEX : index);
     int left = (int)floor(index);
     double w = index - left;
-    // double value = (
-    //     (1 - w) * wave_table[left    ][wave_table_cursor]
-    //     +     w * wave_table[left + 1][wave_table_cursor]
-    // );
-    double value = wave_table[0][wave_table_cursor];
+    double value = (
+        (1 - w) * wave_table[left    ][wave_table_cursor]
+        +     w * wave_table[left + 1][wave_table_cursor]
+    );
+    // double value = wave_table[0][wave_table_cursor];
     dac_oneshot_output_voltage(
         (dac_oneshot_handle_t)user_data, (uint8_t)round(value)
     );
@@ -175,9 +175,9 @@ void app_main(void)
 
     ESP_LOGI(PROJECT_TAG, "ready");
 
-    for (int p = 48; p < 72; p ++) {
-        vTaskDelay(100);
+    for (int p = 72; p >= 48; p --) {
         ESP_LOGI(PROJECT_TAG, "pitch=%d", p);
         updateFrequency(pitch2freq(p));
+        vTaskDelay(100);
     }
 }
