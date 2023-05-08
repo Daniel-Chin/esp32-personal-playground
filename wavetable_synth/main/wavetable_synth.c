@@ -20,12 +20,12 @@
 
 #define WAVE_TABLE_N_SAMPLES 64 // can reach 8000Hz partial, given WAVE_TABLE_F0_MIN=250
 #define WAVE_TABLE_N_F0S 256
-static const double WAVE_TABLE_MAX_F0_INDEX = WAVE_TABLE_N_F0S - 1.0001;
+static const float WAVE_TABLE_MAX_F0_INDEX = WAVE_TABLE_N_F0S - 1.0001;
 #define WAVE_TABLE_F0_MIN 250     // ~ C4
 #define WAVE_TABLE_F0_MAX 4200    // ~ C8
-static const double WAVE_TABLE_INV_D_FREQ = 1 / ((
+static const float WAVE_TABLE_INV_D_FREQ = 1 / ((
     WAVE_TABLE_F0_MAX - WAVE_TABLE_F0_MIN
-) / (double)(WAVE_TABLE_N_F0S - 1));
+) / (float)(WAVE_TABLE_N_F0S - 1));
 
 #define CLOCK_FREQ 8e6
 
@@ -67,7 +67,7 @@ dac_oneshot_handle_t initDAC() {
 
 #define TIMBRE_PITCH_BOTTOM 60
 #define TIMBRE_LEN 49
-const double TIMBRE[TIMBRE_LEN] = {
+const float TIMBRE[TIMBRE_LEN] = {
     0.13676878662109376, 
     0.13676878662109376, 
     0.13676878662109376, 
@@ -118,25 +118,25 @@ const double TIMBRE[TIMBRE_LEN] = {
     0.011419316101074219, 
     0.00209945125579834, 
 };
-double timbreAt(double freq) {
-    double pitch = freq2pitch(freq);
-    double index = pitch - TIMBRE_PITCH_BOTTOM;
+float timbreAt(float freq) {
+    float pitch = freq2pitch(freq);
+    float index = pitch - TIMBRE_PITCH_BOTTOM;
     if (index <= 0)
         return TIMBRE[0];
     if (index >= TIMBRE_LEN - 1)
         return 0;
-    int left = (int)floor(index);
-    double w = index - left;
+    int left = (int)floorf(index);
+    float w = index - left;
     return TIMBRE[left] * (1 - w) + TIMBRE[left + 1] * w;
 }
 
-double cosCached(int x) {
+float cosCached(int x) {
     x %= WAVE_TABLE_N_SAMPLES;
-    static double cache[WAVE_TABLE_N_SAMPLES];
+    static float cache[WAVE_TABLE_N_SAMPLES];
     static bool has_cache[WAVE_TABLE_N_SAMPLES];
     // weak todo: free the cache memory (1.3KB) after initWaveTable() is done. 
     if (! has_cache[x]) {
-        double progress = x / (double) WAVE_TABLE_N_SAMPLES;
+        float progress = x / (float) WAVE_TABLE_N_SAMPLES;
         cache[x] = cos(progress * M_TWOPI);
         has_cache[x] = true;
     }
@@ -146,7 +146,7 @@ double cosCached(int x) {
 void initWaveTable() {
     ESP_LOGI(PROJECT_TAG, "initWaveTable");
     int MAX_N_PARTIALS = WAVE_TABLE_N_SAMPLES / 2;
-    double timbre_max_freq = pitch2freq(TIMBRE_PITCH_BOTTOM + TIMBRE_LEN + 1);
+    float timbre_max_freq = pitch2freq(TIMBRE_PITCH_BOTTOM + TIMBRE_LEN + 1);
     // The timbre defines that any freq above this has mag 0. 
     ESP_LOGI(PROJECT_TAG, "timbre_max_freq = %f", timbre_max_freq);
     if (MAX_N_PARTIALS * WAVE_TABLE_F0_MIN < timbre_max_freq) {
@@ -159,11 +159,11 @@ void initWaveTable() {
             ESP_LOGI(PROJECT_TAG, "%d/%d", f0_i, WAVE_TABLE_N_F0S);
             vTaskDelay(1);  // avoid WATCHDOG
         }
-        double f0 = WAVE_TABLE_F0_MIN + f0_i / WAVE_TABLE_INV_D_FREQ;
-        double timbre[MAX_N_PARTIALS];
+        float f0 = WAVE_TABLE_F0_MIN + f0_i / WAVE_TABLE_INV_D_FREQ;
+        float timbre[MAX_N_PARTIALS];
         int n_partials = MAX_N_PARTIALS;
         for (int f_i = 0; f_i < MAX_N_PARTIALS; f_i ++) {
-            double freq = f0 * (f_i + 1);
+            float freq = f0 * (f_i + 1);
             if (freq > timbre_max_freq) {
                 n_partials = f_i;
                 break;
@@ -171,7 +171,7 @@ void initWaveTable() {
             timbre[f_i] = timbreAt(freq);
         }
         for (int sample_i = 0; sample_i < WAVE_TABLE_N_SAMPLES; sample_i ++) {
-            double acc = 0;
+            float acc = 0;
             for (int f_i = 0; f_i < n_partials; f_i ++) {
                 acc += timbre[f_i] * cosCached(
                     sample_i * (f_i + 1)
@@ -180,7 +180,7 @@ void initWaveTable() {
             if (acc < -1 || acc > 1) {
                 ESP_LOGE(PROJECT_TAG, "audio over-norm!");
             }
-            wave_table[f0_i][sample_i] = (uint8_t)round(
+            wave_table[f0_i][sample_i] = (uint8_t)roundf(
                 (acc + 1) * .5 * 255
             );
         }
@@ -188,24 +188,25 @@ void initWaveTable() {
     ESP_LOGI(PROJECT_TAG, "ok");
 }
 
-void updateFrequency(double freq) {
+void updateWaveRow(float freq, float amplitude) {
     gptimer_alarm_config_t alarm_config1 = {
-        .alarm_count = (int)round(CLOCK_FREQ / (freq * WAVE_TABLE_N_SAMPLES)),
+        .alarm_count = (int)roundf(CLOCK_FREQ / (freq * WAVE_TABLE_N_SAMPLES)),
         .flags.auto_reload_on_alarm = true, 
         .reload_count = 0, 
     };
     gptimer_set_alarm_action(synth_timer, &alarm_config1);
-    double index = (freq - WAVE_TABLE_F0_MIN) * WAVE_TABLE_INV_D_FREQ;
+    float index = (freq - WAVE_TABLE_F0_MIN) * WAVE_TABLE_INV_D_FREQ;
     index = (index < 0 ? 0 : index);
     index = (index > WAVE_TABLE_MAX_F0_INDEX ? WAVE_TABLE_MAX_F0_INDEX : index);
-    int left = (int)floor(index);
-    double w = index - left;
+    int left = (int)floorf(index);
+    float w = index - left;
     // weak todo: optim w/ SIMD (esp-dsp)
     for (int i = 0; i < WAVE_TABLE_N_SAMPLES; i ++) {
-        wave_row[i] = (
+        wave_row[i] = (uint8_t) roundf(amplitude * (
             (1 - w) * wave_table[left    ][i]
             +     w * wave_table[left + 1][i]
-        );
+            - 127.5
+        ) + 127.5);
         // there is also race condition w/ ISR, but it's fine
     }
 }
@@ -230,7 +231,7 @@ void initSynthTimer(dac_oneshot_handle_t dac_handle) {
     ESP_ERROR_CHECK(gptimer_enable(synth_timer));
 
     ESP_LOGI(PROJECT_TAG, "Start timer");
-    updateFrequency(110);   // to set the alarm action
+    updateWaveRow(110, 1);   // to set the alarm action
     ESP_ERROR_CHECK(gptimer_start(synth_timer));
 }
 
@@ -248,7 +249,9 @@ void app_main(void)
 
     for (int p = 72; p >= 48; p --) {
         ESP_LOGI(PROJECT_TAG, "pitch=%d", p);
-        updateFrequency(pitch2freq(p));
-        vTaskDelay(200);
+        for (float a = 0; a <= 1; a += .01) {
+            updateWaveRow(pitch2freq(p), a);
+            vTaskDelay(2);
+        }
     }
 }
