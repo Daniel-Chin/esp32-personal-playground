@@ -249,8 +249,8 @@ void app_main(void)
 
     for (int p = 72; p >= 48; p --) {
         ESP_LOGI(PROJECT_TAG, "pitch=%d", p);
-        for (float a = 0; a <= 1; a += .01) {
-            updateWaveRow(pitch2freq(p), a);
+        for (float a = 0; a <= 1; a += .03) {
+            updateWaveRow(pitch2freq(p + a * .4), a);
             vTaskDelay(2);
         }
     }
