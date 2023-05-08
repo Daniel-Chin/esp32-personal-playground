@@ -13,6 +13,7 @@
 #include "driver/gptimer.h"
 #include "esp_log.h"
 #include "driver/dac_oneshot.h"
+#include "esp_timer.h"
 
 #include "kit.c"
 #include "music.c"
@@ -151,8 +152,10 @@ void initWaveTable() {
     if (MAX_N_PARTIALS * WAVE_TABLE_F0_MIN < timbre_max_freq) {
         ESP_LOGW(PROJECT_TAG, "Some meaningful partials exceed Nyquist freq. ");
     }
+    int next_wake = esp_timer_get_time() + 1e6;
     for (int f0_i = 0; f0_i < WAVE_TABLE_N_F0S; f0_i ++) {
-        if (f0_i % 8 == 0) {
+        if (esp_timer_get_time() > next_wake) {
+            next_wake += 1e6;
             ESP_LOGI(PROJECT_TAG, "%d/%d", f0_i, WAVE_TABLE_N_F0S);
             vTaskDelay(1);  // avoid WATCHDOG
         }
