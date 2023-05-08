@@ -63,11 +63,59 @@ dac_oneshot_handle_t initDAC() {
     return handle;
 }
 
-#define N_PARTIALS 30
 #define TIMBRE_PITCH_BOTTOM 60
-#define TIMBRE_LEN 5
+#define TIMBRE_LEN 50
 const double TIMBRE[TIMBRE_LEN] = {
-    .3, .3, .3, .3, .03, 
+    0.13676878662109376, 
+    0.13676878662109376, 
+    0.13676878662109376, 
+    0.13676878662109376, 
+    0.13676878662109376, 
+    0.13676878662109376, 
+    0.13676878662109376, 
+    0.13676878662109376, 
+    0.2327656005859375, 
+    0.2327656005859375, 
+    0.11663565673828126, 
+    0.12271953125, 
+    0.12271953125, 
+    0.12271953125, 
+    0.09569869384765625, 
+    0.09569869384765625, 
+    0.09569869384765625, 
+    0.253130078125, 
+    0.12710006103515625, 
+    0.12710006103515625, 
+    0.036081689453125, 
+    0.036081689453125, 
+    0.07039032592773438, 
+    0.025634671020507815, 
+    0.025634671020507815, 
+    0.20156268310546877, 
+    0.0039300498962402345, 
+    0.29150974121093753, 
+    0.027677261352539066, 
+    0.07467901000976562, 
+    0.032162060546875, 
+    0.008509994506835938, 
+    0.016688189697265626, 
+    0.02972444763183594, 
+    0.01769535675048828, 
+    0.003682607650756836, 
+    0.02248181304931641, 
+    0.005784563827514648, 
+    0.007685343170166016, 
+    0.002239899444580078, 
+    0, 
+    0.0074455039978027346, 
+    0.0015351497650146486, 
+    0.0024925634384155276, 
+    0.016617822265625002, 
+    0.001835605239868164, 
+    0.0025110095977783206, 
+    0.011419316101074219, 
+    0.00209945125579834, 
+    0, 
 };
 double timbreAt(double freq) {
     double pitch = freq2pitch(freq);
@@ -96,20 +144,26 @@ double cosCached(int x) {
 
 void initWaveTable() {
     ESP_LOGI(PROJECT_TAG, "initWaveTable");
+    int MAX_N_PARTIALS = WAVE_TABLE_N_SAMPLES / 2;
     for (int f0_i = 0; f0_i < WAVE_TABLE_N_F0S; f0_i ++) {
         if (f0_i % 8 == 0) {
             ESP_LOGI(PROJECT_TAG, "%d/%d", f0_i, WAVE_TABLE_N_F0S);
             vTaskDelay(1);  // avoid WATCHDOG
         }
         double f0 = WAVE_TABLE_F0_MIN + f0_i / WAVE_TABLE_INV_D_FREQ;
-        double timbre[N_PARTIALS];
-        for (int f_i = 0; f_i < N_PARTIALS; f_i ++) {
+        double timbre[MAX_N_PARTIALS];
+        int n_partials = MAX_N_PARTIALS;
+        for (int f_i = 0; f_i < MAX_N_PARTIALS; f_i ++) {
             double freq = f0 * (f_i + 1);
+            if (freq > 22050) { // human hearing
+                n_partials = f_i;
+                break;
+            }
             timbre[f_i] = timbreAt(freq);
         }
         for (int sample_i = 0; sample_i < WAVE_TABLE_N_SAMPLES; sample_i ++) {
             double acc = 0;
-            for (int f_i = 0; f_i < N_PARTIALS; f_i ++) {
+            for (int f_i = 0; f_i < n_partials; f_i ++) {
                 acc += timbre[f_i] * cosCached(
                     sample_i * (f_i + 1)
                 );
