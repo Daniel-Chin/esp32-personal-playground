@@ -17,7 +17,7 @@
 #include "kit.c"
 #include "music.c"
 
-#define WAVE_TABLE_N_SAMPLES 128
+#define WAVE_TABLE_N_SAMPLES 64 // can reach 8000Hz partial, given WAVE_TABLE_F0_MIN=250
 #define WAVE_TABLE_N_F0S 256
 static const double WAVE_TABLE_MAX_F0_INDEX = WAVE_TABLE_N_F0S - 1.0001;
 #define WAVE_TABLE_F0_MIN 250     // ~ C4
@@ -41,6 +41,7 @@ static bool IRAM_ATTR nextAudioSample(
     const gptimer_alarm_event_data_t *edata, 
     void *user_data
 ) {
+    // ISR context
     dac_oneshot_output_voltage(
         (dac_oneshot_handle_t)user_data, 
         wave_row[wave_row_cursor]
@@ -64,7 +65,7 @@ dac_oneshot_handle_t initDAC() {
 }
 
 #define TIMBRE_PITCH_BOTTOM 60
-#define TIMBRE_LEN 50
+#define TIMBRE_LEN 49
 const double TIMBRE[TIMBRE_LEN] = {
     0.13676878662109376, 
     0.13676878662109376, 
@@ -115,7 +116,6 @@ const double TIMBRE[TIMBRE_LEN] = {
     0.0025110095977783206, 
     0.011419316101074219, 
     0.00209945125579834, 
-    0, 
 };
 double timbreAt(double freq) {
     double pitch = freq2pitch(freq);
@@ -123,7 +123,7 @@ double timbreAt(double freq) {
     if (index <= 0)
         return TIMBRE[0];
     if (index >= TIMBRE_LEN - 1)
-        return TIMBRE[TIMBRE_LEN - 1];
+        return 0;
     int left = (int)floor(index);
     double w = index - left;
     return TIMBRE[left] * (1 - w) + TIMBRE[left + 1] * w;
@@ -145,6 +145,12 @@ double cosCached(int x) {
 void initWaveTable() {
     ESP_LOGI(PROJECT_TAG, "initWaveTable");
     int MAX_N_PARTIALS = WAVE_TABLE_N_SAMPLES / 2;
+    double timbre_max_freq = pitch2freq(TIMBRE_PITCH_BOTTOM + TIMBRE_LEN + 1);
+    // The timbre defines that any freq above this has mag 0. 
+    ESP_LOGI(PROJECT_TAG, "timbre_max_freq = %f", timbre_max_freq);
+    if (MAX_N_PARTIALS * WAVE_TABLE_F0_MIN < timbre_max_freq) {
+        ESP_LOGW(PROJECT_TAG, "Some meaningful partials exceed Nyquist freq. ");
+    }
     for (int f0_i = 0; f0_i < WAVE_TABLE_N_F0S; f0_i ++) {
         if (f0_i % 8 == 0) {
             ESP_LOGI(PROJECT_TAG, "%d/%d", f0_i, WAVE_TABLE_N_F0S);
@@ -155,7 +161,7 @@ void initWaveTable() {
         int n_partials = MAX_N_PARTIALS;
         for (int f_i = 0; f_i < MAX_N_PARTIALS; f_i ++) {
             double freq = f0 * (f_i + 1);
-            if (freq > 22050) { // human hearing
+            if (freq > timbre_max_freq) {
                 n_partials = f_i;
                 break;
             }
@@ -229,8 +235,10 @@ void app_main(void)
 {
     dac_oneshot_handle_t dac_handle = initDAC();
     initWaveTable();
-    printArray(&(wave_table[0][0]), WAVE_TABLE_N_SAMPLES);
-    printf("\n");
+    // ESP_LOGI(PROJECT_TAG, "Example waveform:");
+    // printArray(&(wave_table[0][0]), WAVE_TABLE_N_SAMPLES);
+    // printf("\n");
+
     initSynthTimer(dac_handle);
 
     ESP_LOGI(PROJECT_TAG, "ready");
